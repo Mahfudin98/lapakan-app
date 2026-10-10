@@ -3,7 +3,10 @@
 Mengumpulkan dan menelusuri data toko dari Google Maps berdasarkan wilayah administratif Indonesia dan jenis toko.
 100% gratis dan self-hosted (Playwright, tanpa Google Places API).
 
-> Status: **Selesai (Tahap 1–5)**: database, seed wilayah, scraper, job queue + API, frontend, halaman hasil (tabel, peta, sorting, filter, ekspor).
+> Status: **Selesai**: database, seed wilayah, scraper, antrean job + API, frontend, halaman hasil, dan **installer Windows**.
+>
+> **Pengguna awam (Windows):** unduh installer dari halaman Releases, klik dua kali, selesai. Lihat [desktop/README.md](desktop/README.md).
+> Bagian di bawah ini untuk pengembang / yang menjalankan dengan Docker.
 
 ## Setup
 
@@ -74,7 +77,10 @@ Struktur Google bisa berubah kapan saja. Semua selector ada di `backend/app/scra
 
 ## Job scraping (Tahap 3)
 
-`docker compose up -d` menjalankan `api`, `worker` (arq, **1 job / 1 browser** pada satu waktu), `db`, `redis`.
+`docker compose up -d` menjalankan `api`, `worker` (**1 job / 1 browser** pada satu waktu), `db`, dan `web`.
+Tidak ada Redis: antrean job adalah tabel `scrape_jobs` di PostgreSQL. API membuat job `queued`, worker
+(`python -m app.workers.runner`) mengambilnya; pembatalan lewat kolom `cancel_requested`. Worker dijaga satu saja
+dengan advisory lock PostgreSQL.
 
 | Endpoint | Keterangan |
 |---|---|
@@ -101,7 +107,9 @@ Aturan:
   kecamatan hasilnya `NULL`; mode `detail` memberi alamat lengkap sehingga lebih akurat.
 - Job `running` yang tertinggal saat worker mati ditandai `failed` ketika worker start lagi.
 
-Tes (termasuk integrasi DB, jalankan di container): `docker compose exec worker python -m pytest`
+Tes (termasuk integrasi DB, jalankan di container): `docker compose exec api python -m pytest`.
+Tes yang menyentuh database otomatis memakai database terpisah `<nama>_test` (dibuat otomatis), supaya job uji tidak
+diambil worker sungguhan dan data asli aman.
 
 ## Antarmuka
 

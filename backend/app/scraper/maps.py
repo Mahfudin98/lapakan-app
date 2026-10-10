@@ -86,9 +86,38 @@ class MapsScraper:
         self.page: Page | None = None
 
     # --- lifecycle -----------------------------------------------------------------
+    async def _launch_browser(self) -> Browser:
+        """Chromium bawaan Playwright (Docker), atau Edge/Chrome yang sudah terpasang (edisi Windows)."""
+        mode = (get_settings().scrape_browser or "").strip().lower()
+        if mode in ("", "chromium"):
+            candidates: list[str | None] = [None]
+        elif mode == "auto":
+            candidates = ["msedge", "chrome", None]  # Edge ada di setiap Windows 10/11
+        else:
+            candidates = [mode]
+        last: Exception | None = None
+        for channel in candidates:
+            try:
+                kwargs = {"channel": channel} if channel else {}
+                browser = await self._pw.chromium.launch(headless=self.cfg.headless, **kwargs)
+                log.info("browser_launched", channel=channel or "chromium")
+                return browser
+            except Exception as exc:  # noqa: BLE001 - coba kandidat berikutnya
+                last = exc
+                log.warning("browser_launch_failed", channel=channel or "chromium", error=str(exc)[:300])
+        raise ScrapeError(
+            "Browser untuk scraping tidak ditemukan. Pasang Microsoft Edge atau Google Chrome, "
+            f"lalu jalankan ulang. Detail: {str(last)[:200]}"
+        )
+
     async def __aenter__(self) -> "MapsScraper":
         self._pw = await async_playwright().start()
-        self._browser = await self._pw.chromium.launch(headless=self.cfg.headless)
+        try:
+            self._browser = await self._launch_browser()
+        except BaseException:
+            await self._pw.stop()
+            self._pw = None
+            raise
         self._ctx = await self._browser.new_context(
             locale="id-ID",
             timezone_id="Asia/Jakarta",

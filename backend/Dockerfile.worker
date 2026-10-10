@@ -11,4 +11,4 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && playwright install --with-deps chromium
 COPY . .
 
-CMD ["arq", "app.workers.worker.WorkerSettings"]
+CMD ["python", "-m", "app.workers.runner"]

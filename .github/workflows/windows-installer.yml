@@ -1,0 +1,57 @@
+name: Windows installer
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # untuk melampirkan installer ke Release
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Tes unit edisi desktop
+        shell: pwsh
+        run: |
+          python -m pip install -r backend/requirements.txt pystray Pillow
+          Push-Location backend
+          $env:DATABASE_URL = "postgresql+psycopg://x:y@127.0.0.1:1/z"   # tanpa database: tes DB di-skip
+          python -m pytest tests/test_desktop.py tests/test_parser.py tests/test_scoring.py tests/test_planner.py tests/test_region_match.py -q
+
+      - name: Bangun installer
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File desktop/build.ps1
+
+      - name: Uji instalasi nyata
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem desktop/dist/PetaToko-Setup-*.exe | Select-Object -First 1).FullName
+          powershell -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test_install.ps1 -Installer $setup
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PetaToko-Setup
+          path: |
+            desktop/dist/PetaToko-Setup-*.exe
+            desktop/dist/PetaToko-Setup-*.exe.sha256
+
+      - name: Lampirkan ke Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/dist/PetaToko-Setup-*.exe
+            desktop/dist/PetaToko-Setup-*.exe.sha256
+          generate_release_notes: true

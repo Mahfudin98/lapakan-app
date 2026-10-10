@@ -1,0 +1,48 @@
+PETA TOKO - PEMBERITAHUAN PERANGKAT LUNAK PIHAK KETIGA
+=====================================================
+
+Peta Toko memuat atau memakai perangkat lunak sumber terbuka berikut. Terima kasih kepada para pengembangnya.
+Teks lisensi lengkap tersedia di situs masing-masing komponen.
+
+Database (dijalankan sebagai proses terpisah, hanya dapat diakses dari komputer ini)
+------------------------------------------------------------------------------------
+- PostgreSQL 16            Lisensi PostgreSQL      https://www.postgresql.org/
+    Biner Windows: EnterpriseDB  https://www.enterprisedb.com/download-postgresql-binaries
+- PostGIS 3.6              GNU GPL versi 2 atau lebih baru   https://postgis.net/
+    Biner: https://download.osgeo.org/postgis/windows/pg16/
+    Kode sumber PostGIS: https://postgis.net/source/  (tersedia atas permintaan juga melalui halaman proyek)
+    PostGIS berkomunikasi dengan aplikasi hanya lewat SQL (proses terpisah); kode Peta Toko tidak ditautkan
+    ke PostGIS sehingga tidak menjadi karya turunannya.
+- Pustaka yang dibawa bundel PostGIS: GEOS (LGPL 2.1), PROJ (MIT), GDAL (MIT/X), libxml2 (MIT), json-c (MIT),
+  protobuf-c (BSD), SQLite (domain publik), libcurl (curl), OpenSSL 3 (Apache 2.0), zlib, liblzma, zstd, dll.
+
+Python dan pustaka
+------------------
+- Python 3.12 (embeddable)  Lisensi PSF            https://www.python.org/
+- FastAPI, Starlette, Pydantic, SQLAlchemy, Alembic, GeoAlchemy2, openpyxl, structlog, httpx   MIT / BSD
+- uvicorn                   BSD                     https://www.uvicorn.org/
+- psycopg 3                 LGPL 3.0                https://www.psycopg.org/
+- Playwright for Python     Apache 2.0 (+ Node.js MIT)   https://playwright.dev/
+- lxml                      BSD                     https://lxml.de/
+- Beautiful Soup 4          MIT
+- Pillow                    HPND                    https://python-pillow.org/
+- pystray                   LGPL 3.0                https://github.com/moses-palmer/pystray
+
+Antarmuka
+---------
+- React, TanStack Query, TanStack Table, Tailwind CSS, Vite    MIT
+- Leaflet (BSD 2-Clause), leaflet.markercluster (MIT)
+- Ubin peta (c) kontributor OpenStreetMap, data di bawah Open Database License (ODbL)
+  https://www.openstreetmap.org/copyright
+
+Data
+----
+- Kode dan nama wilayah administratif Indonesia: emsifa/api-wilayah-indonesia (MIT)
+  https://github.com/emsifa/api-wilayah-indonesia
+
+Penting: data toko
+------------------
+Data toko diambil dari halaman publik Google Maps menggunakan browser otomatis. Penggunaan Google Maps tunduk
+pada Ketentuan Layanan Google; pengambilan data otomatis dapat melanggar ketentuan tersebut. Gunakan secara
+wajar dan atas tanggung jawab Anda sendiri. Aplikasi ini sengaja membatasi kecepatan, menghormati batas hasil,
+dan berhenti (tidak berusaha melewati) bila Google menampilkan captcha atau pemblokiran.

@@ -1,10 +1,10 @@
-"""Task arq: menjalankan satu ScrapeJob.
+"""Menjalankan satu ScrapeJob (dipanggil oleh app.workers.runner).
 
 Aturan:
 - `max_results` adalah batas TOTAL tempat unik per job (bukan per query).
 - Query yang sama dalam `scrape_cache_days` hari memakai cache (tidak membuka browser).
 - Captcha/blokir -> status "blocked", job berhenti. Tidak ada retry/bypass.
-- Pembatalan lewat kunci Redis `job:{id}:cancel`, dicek di antara aksi.
+- Pembatalan lewat kolom `scrape_jobs.cancel_requested` (diset API), dicek di antara aksi.
 """
 import asyncio
 import time
@@ -30,10 +30,6 @@ from app.services.places import get_cached, link_places, put_cache, upsert_place
 
 log = get_logger("worker.job")
 MAX_ERRORS_KEPT = 20
-
-
-def cancel_key(job_id) -> str:
-    return f"job:{job_id}:cancel"
 
 
 class Progress:
@@ -75,6 +71,11 @@ def _set_status(job_id, status: str, error: str | None = None, finished: bool = 
     with SessionLocal() as db:
         db.execute(update(ScrapeJob).where(ScrapeJob.id == job_id).values(**vals))
         db.commit()
+
+
+def _cancel_requested(job_id) -> bool:
+    with SessionLocal() as db:
+        return bool(db.scalar(select(ScrapeJob.cancel_requested).where(ScrapeJob.id == job_id)))
 
 
 def _load(job_id) -> tuple[str, dict] | None:
@@ -121,10 +122,11 @@ def _save_places(job_id, pq, places, matcher, cache: tuple[bool, int, bool] | No
     return ids, new
 
 
-async def run_scrape_job(ctx: dict, job_id: str) -> str:
+async def run_scrape_job(job_id: str, stop: asyncio.Event | None = None) -> str:
+    """Jalankan job. `stop` (opsional) = sinyal berhenti dari proses worker (aplikasi ditutup):
+    job diakhiri sebagai 'cancelled' dengan hasil sebagian tetap tersimpan."""
     settings = get_settings()
     jid = uuid.UUID(job_id)
-    redis = ctx["redis"]
 
     loaded = await asyncio.to_thread(_load, jid)
     if loaded is None:
@@ -151,8 +153,14 @@ async def run_scrape_job(ctx: dict, job_id: str) -> str:
     await asyncio.to_thread(_set_status, jid, "running")
     await progress.set(force=True, phase="starting")
 
+    shutting_down = False
+
     async def is_cancelled() -> bool:
-        return bool(await redis.exists(cancel_key(jid)))
+        nonlocal shutting_down
+        if stop is not None and stop.is_set():
+            shutting_down = True
+            return True
+        return await asyncio.to_thread(_cancel_requested, jid)
 
     found_ids: set[int] = set()
     final = "done"
@@ -238,7 +246,8 @@ async def run_scrape_job(ctx: dict, job_id: str) -> str:
     except BlockedError as exc:
         final, error = "blocked", str(exc)
     except JobCancelled:
-        final, error = "cancelled", None
+        final = "cancelled"
+        error = "Aplikasi ditutup saat pencarian berjalan; hasil yang sudah terkumpul tetap tersimpan." if shutting_down else None
     except Exception as exc:  # noqa: BLE001 - job tidak boleh meninggalkan status 'running'
         log.exception("job_crashed", **structlog_ctx)
         final, error = "failed", f"{type(exc).__name__}: {exc}"
@@ -246,7 +255,6 @@ async def run_scrape_job(ctx: dict, job_id: str) -> str:
     progress.data.update(phase=final, current_query=None, found=len(found_ids))
     await asyncio.to_thread(progress._write)
     await asyncio.to_thread(_set_status, jid, final, error, True)
-    await redis.delete(cancel_key(jid))
     log.info("job_finished", **structlog_ctx, status=final, found=len(found_ids), error=error)
     return final
 

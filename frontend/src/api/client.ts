@@ -2,7 +2,10 @@ import type {
   Category, Facet, Job, JobCreate, MapPoints, Place, PlaceList, PlanPreview, Region, RegionDetail,
 } from "./types";
 
-export const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+// Dev (Vite/Docker): API di localhost:8000 kecuali VITE_API_URL diset. Build produksi (edisi Windows):
+// API dan antarmuka dilayani dari satu alamat, jadi default-nya relatif ("").
+export const BASE: string =
+  (import.meta.env.VITE_API_URL as string | undefined) ?? (import.meta.env.DEV ? "http://localhost:8000" : "");
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {

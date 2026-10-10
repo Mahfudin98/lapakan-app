@@ -78,14 +78,6 @@ def test_cache_validity_rules():
 
 
 # --- runner --------------------------------------------------------------------------------
-class FakeRedis:
-    async def exists(self, key):
-        return 0
-
-    async def delete(self, key):
-        return 1
-
-
 def make_fake_scraper(behaviour):
     class FakeScraper:
         def __init__(self, cfg, **kw):
@@ -120,8 +112,11 @@ def new_job(**params) -> uuid.UUID:
         return job.id
 
 
-def run(job_id):
-    return asyncio.run(tasks.run_scrape_job({"redis": FakeRedis()}, str(job_id)))
+def run(job_id, stop=None):
+    async def go():
+        return await tasks.run_scrape_job(str(job_id), stop)
+
+    return asyncio.run(go())
 
 
 def status(job_id):
@@ -238,3 +233,47 @@ def test_final_pass_does_not_double_count(monkeypatch):
     assert run(jid) == "done"
     prog = status(jid)[2]
     assert prog["found"] == 3 and prog["new"] == 3 and prog["updated"] == 0
+
+
+# --- pembatalan lewat database, sinyal berhenti, antrean --------------------------------------
+def test_cancel_requested_flag_cancels_before_any_scraping(monkeypatch):
+    calls = []
+
+    def behaviour(q, mx):
+        calls.append(q)
+        return [pd(41)]
+
+    monkeypatch.setattr(tasks, "MapsScraper", make_fake_scraper(behaviour))
+    jid = new_job()
+    with SessionLocal() as db:
+        db.execute(text("update scrape_jobs set cancel_requested = true where id = :i"), {"i": jid})
+        db.commit()
+    assert run(jid) == "cancelled"
+    st, err, prog, fin = status(jid)
+    assert st == "cancelled" and err is None and fin is not None
+    assert calls == []  # tidak ada query yang dijalankan
+
+
+def test_stop_event_ends_job_as_cancelled_with_explanation(monkeypatch):
+    monkeypatch.setattr(tasks, "MapsScraper", make_fake_scraper(lambda q, mx: [pd(51)]))
+    jid = new_job()
+    stop = asyncio.Event()
+    stop.set()  # aplikasi sedang ditutup
+    assert run(jid, stop) == "cancelled"
+    st, err, _, _ = status(jid)
+    assert st == "cancelled" and "ditutup" in err
+
+
+def test_runner_picks_oldest_queued_job_first():
+    from app.workers.runner import next_queued_job_id
+
+    with SessionLocal() as db:  # bersihkan antrean sisa agar urutan dapat dipastikan
+        db.execute(text("delete from scrape_jobs where status = 'queued'"))
+        db.commit()
+    first = new_job()
+    second = new_job()
+    assert next_queued_job_id() == str(first)
+    with SessionLocal() as db:
+        db.execute(text("update scrape_jobs set status = 'done' where id = :i"), {"i": first})
+        db.commit()
+    assert next_queued_job_id() == str(second)

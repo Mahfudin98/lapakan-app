@@ -7,7 +7,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+psycopg://petatoko:petatoko@localhost:5432/petatoko"
-    redis_url: str = "redis://localhost:6379/0"
     log_level: str = "INFO"
     cors_origins: str = "http://localhost:5173"
 
@@ -19,6 +18,8 @@ class Settings(BaseSettings):
     worker_job_timeout: int = 6 * 3600
     bayesian_m: int = 20
     debug_dir: str = "/data/debug"
+    # "" = Chromium bawaan Playwright (Docker); "auto" = pakai Microsoft Edge / Google Chrome yang sudah terpasang
+    scrape_browser: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

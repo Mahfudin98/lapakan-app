@@ -13,4 +13,3 @@ pytest>=8.2
 playwright>=1.47
 beautifulsoup4>=4.12
 lxml>=5.2
-arq>=0.26

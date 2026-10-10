@@ -2,8 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.concurrency import run_in_threadpool
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -12,7 +11,6 @@ from app.config import get_settings
 from app.db import get_db
 from app.models import ScrapeJob
 from app.services import planner
-from app.workers.tasks import cancel_key
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 ACTIVE = ("queued", "running")
@@ -92,10 +90,9 @@ def _create_row(db: Session, body: JobCreate) -> ScrapeJob:
 
 
 @router.post("", response_model=JobOut, status_code=201)
-async def create_job(body: JobCreate, request: Request, db: Annotated[Session, Depends(get_db)]):
-    job = await run_in_threadpool(_create_row, db, body)
-    await request.app.state.arq.enqueue_job("run_scrape_job", str(job.id))
-    return job
+def create_job(body: JobCreate, db: Annotated[Session, Depends(get_db)]):
+    """Buat job berstatus 'queued'; worker (app.workers.runner) mengambilnya dari database."""
+    return _create_row(db, body)
 
 
 @router.get("", response_model=list[JobOut])
@@ -119,17 +116,17 @@ def get_job(job_id: uuid.UUID, db: Annotated[Session, Depends(get_db)]):
 
 
 @router.post("/{job_id}/cancel", response_model=JobOut)
-async def cancel_job(job_id: uuid.UUID, request: Request, db: Annotated[Session, Depends(get_db)]):
-    job = await run_in_threadpool(_get_or_404, db, job_id)
+def cancel_job(job_id: uuid.UUID, db: Annotated[Session, Depends(get_db)]):
+    job = _get_or_404(db, job_id)
     if job.status not in ACTIVE:
         raise HTTPException(409, f"job sudah berstatus '{job.status}'")
-    if job.status == "queued":
-        # belum diambil worker: langsung batalkan (worker akan melewatinya)
-        db.execute(
-            update(ScrapeJob).where(ScrapeJob.id == job_id, ScrapeJob.status == "queued")
-            .values(status="cancelled", finished_at=datetime.now(timezone.utc))
-        )
-        db.commit()
-    await request.app.state.arq.set(cancel_key(job_id), "1", ex=86_400)
+    # selalu tandai permintaan batal (worker memeriksanya di antara aksi)
+    db.execute(update(ScrapeJob).where(ScrapeJob.id == job_id).values(cancel_requested=True))
+    # belum diambil worker: langsung batalkan (worker akan melewatinya)
+    db.execute(
+        update(ScrapeJob).where(ScrapeJob.id == job_id, ScrapeJob.status == "queued")
+        .values(status="cancelled", finished_at=datetime.now(timezone.utc))
+    )
+    db.commit()
     db.refresh(job)
     return job
