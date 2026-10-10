@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes stripes { to { background-position: 28px 0; } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.spin { animation: spin 0.9s linear infinite; }
+.pulse-dot { animation: pulse-dot 1.2s ease-in-out infinite; }
+.stripes {
+  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 25%, transparent 25%, transparent 50%,
+    rgba(255, 255, 255, 0.25) 50%, rgba(255, 255, 255, 0.25) 75%, transparent 75%);
+  background-size: 28px 28px;
+  animation: stripes 0.8s linear infinite;
+}
+.pop-in { animation: pop-in 0.25s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .spin, .pulse-dot, .stripes, .pop-in { animation: none; }
+}
+
+/* panel Leaflet memakai z-index hingga 1000; kurung di konteks sendiri agar tidak menimpa menu/toolbar */
+.leaflet-container { isolation: isolate; z-index: 0; }
+
+:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }

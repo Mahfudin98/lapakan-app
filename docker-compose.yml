@@ -1,0 +1,104 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-petatoko}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-petatoko}
+      POSTGRES_DB: ${POSTGRES_DB:-petatoko}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-petatoko} -d ${POSTGRES_DB:-petatoko}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-petatoko}:${POSTGRES_PASSWORD:-petatoko}@db:5432/${POSTGRES_DB:-petatoko}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  # worker arq: menjalankan job scraping (1 job / 1 browser pada satu waktu)
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-petatoko}:${POSTGRES_PASSWORD:-petatoko}@db:5432/${POSTGRES_DB:-petatoko}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      api:
+        condition: service_started
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+    command: arq app.workers.worker.WorkerSettings
+    restart: unless-stopped
+
+  # CLI scraper standalone (tahap 2):
+  #   docker compose --profile scraper run --rm scraper python -m app.scraper.cli "..."
+  scraper:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    profiles: ["scraper"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-petatoko}:${POSTGRES_PASSWORD:-petatoko}@db:5432/${POSTGRES_DB:-petatoko}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      - web_node_modules:/app/node_modules  # node_modules Linux terpisah dari yang di host (Windows)
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  redisdata:
+  web_node_modules:
