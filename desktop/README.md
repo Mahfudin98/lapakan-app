@@ -14,7 +14,8 @@ tanpa instalasi database terpisah, tanpa hak administrator.
   mengunduh Chromium sendiri saat pertama kali (± 150 MB).
 
 ### Memasang
-1. Unduh `PetaToko-Setup-<versi>.exe` dari halaman **Releases** repositori ini.
+1. Unduh `PetaToko-Setup-<versi>.exe` dari halaman **Releases**:
+   https://github.com/Mahfudin98/lapakan-app/releases/latest
 2. Klik dua kali. Jika Windows menampilkan *"Windows protected your PC"* (SmartScreen), klik **More info → Run anyway**.
    Ini muncul karena installer belum ditandatangani sertifikat berbayar; lihat [Catatan keamanan](#catatan-keamanan).
 3. Ikuti langkahnya (Berikutnya → Berikutnya). Di langkah **Lokasi data** biarkan bawaan kecuali Anda ingin data
@@ -64,12 +65,37 @@ Jalankan installer versi baru; data lama dipertahankan. Aplikasi yang sedang ber
 | Nama folder data berhuruf non-Latin (mis. Sirilik/Arab/Mandarin) | Didukung: PostgreSQL di Windows hanya menerima path dalam codepage ANSI, jadi aplikasi memetakan folder itu ke sebuah huruf drive sementara. Bila tetap gagal, pilih folder data berhuruf Latin (mis. `C:\PetaToko`). |
 
 ### Catatan keamanan
-- Installer **belum ditandatangani** (sertifikat code-signing berbayar). Karena itu SmartScreen/antivirus bisa memberi
-  peringatan pada program baru. Anda dapat memverifikasi berkas dengan checksum SHA-256 yang disertakan di halaman Releases:
-  `Get-FileHash .\PetaToko-Setup-<versi>.exe -Algorithm SHA256`.
+- **Peringatan "Windows protected your PC" (SmartScreen).** Muncul pada setiap program baru yang belum punya reputasi atau
+  tanda tangan digital. Klik **More info → Run anyway**. Berkas ini dipindai Microsoft Defender dan **tidak terdeteksi ancaman**.
+- **Verifikasi berkas.** Bandingkan checksum SHA-256 yang tertulis di halaman Release:
+  `Get-FileHash .\PetaToko-Setup-<versi>.exe -Algorithm SHA256`. Berkas Release dibangun otomatis oleh GitHub Actions dari
+  kode di repositori ini dan dilengkapi *build provenance attestation* (tab **Attestations**); dengan
+  [GitHub CLI](https://cli.github.com/): `gh attestation verify .\PetaToko-Setup-<versi>.exe -R Mahfudin98/lapakan-app`.
+- **Antivirus pihak ketiga menandai berkas?** Kemungkinan *false positive* (program Python + Node yang dibundel kerap
+  terkena heuristik). Laporkan ke vendor; untuk Microsoft Defender: https://www.microsoft.com/en-us/wdsi/filesubmission
+  (pilih "Software developer", unggah installer).
 - Server hanya mendengarkan `127.0.0.1`; tidak dapat diakses dari komputer lain di jaringan.
 - Data toko diambil dari halaman publik Google Maps. Penggunaannya tunduk pada Ketentuan Layanan Google; gunakan secara
   wajar dan atas tanggung jawab sendiri. Aplikasi membatasi kecepatan dan tidak mencoba melewati captcha.
+
+### Menghilangkan peringatan SmartScreen: tanda tangan digital
+SmartScreen hanya mempercayai installer yang **ditandatangani sertifikat code-signing dari otoritas tepercaya**, dan
+reputasi terbentuk seiring jumlah unduhan. Tidak ada cara sah untuk menghilangkannya tanpa sertifikat. Pipa penandatanganan
+sudah tersedia di proyek ini (diuji dengan sertifikat uji): installer **dan** uninstaller ditandatangani lengkap dengan
+timestamp. Tinggal menyediakan sertifikat:
+
+| Opsi | Biaya | Catatan |
+|---|---|---|
+| [SignPath Foundation](https://signpath.org/) | gratis untuk proyek open source | butuh lisensi OSI di repositori (mis. MIT), repositori publik, dan build di CI (sudah: GitHub Actions). Daftar sekali; tanda tangan dilakukan di layanan mereka, jadi tidak ada berkas `.pfx` yang disimpan. |
+| Sertifikat code-signing OV/EV dari CA (Sectigo, DigiCert, dll.) | ± US$ 100-500/tahun | EV memberi reputasi SmartScreen langsung; OV butuh waktu. |
+| Azure Trusted Signing | berbayar bulanan | Validasi identitas bergantung negara/jenis akun. |
+
+Memakai berkas `.pfx` (opsi sertifikat sendiri):
+- **Lokal:** `$env:PETATOKO_SIGN_PFX='C:\path\sertifikat.pfx'; $env:PETATOKO_SIGN_PASSWORD='...'; powershell -File desktop\build.ps1`
+- **GitHub Actions:** tambahkan secret `PETATOKO_SIGN_PFX_BASE64` (`[Convert]::ToBase64String([IO.File]::ReadAllBytes('sertifikat.pfx'))`)
+  dan `PETATOKO_SIGN_PASSWORD` di *Settings → Secrets and variables → Actions*. Workflow otomatis menandatangani, dan
+  ringkasan Release mencantumkan penandatangannya.
+- Opsional: `PETATOKO_SIGN_TIMESTAMP` untuk mengganti server timestamp (bawaan DigiCert).
 
 ---
 

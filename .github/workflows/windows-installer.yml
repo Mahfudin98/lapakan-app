@@ -1,16 +1,20 @@
 name: Windows installer
 
+# Dijalankan saat tag versi (v1.0.0, dst.) di-push, atau manual. Hasil: installer + checksum terlampir di halaman Releases.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
 
 permissions:
-  contents: write   # untuk melampirkan installer ke Release
+  contents: write        # melampirkan installer ke Release
+  id-token: write        # provenance (attestation)
+  attestations: write
 
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -22,7 +26,7 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Tes unit edisi desktop
+      - name: Tes unit
         shell: pwsh
         run: |
           python -m pip install -r backend/requirements.txt pystray Pillow
@@ -30,15 +34,54 @@ jobs:
           $env:DATABASE_URL = "postgresql+psycopg://x:y@127.0.0.1:1/z"   # tanpa database: tes DB di-skip
           python -m pytest tests/test_desktop.py tests/test_parser.py tests/test_scoring.py tests/test_planner.py tests/test_region_match.py -q
 
+      # Opsional: tanda tangan digital. Isi secret PETATOKO_SIGN_PFX_BASE64 (berkas .pfx dalam base64) dan
+      # PETATOKO_SIGN_PASSWORD bila Anda punya sertifikat code-signing. Tanpa secret, langkah ini dilewati.
+      - name: Siapkan sertifikat tanda tangan (jika ada)
+        shell: pwsh
+        env:
+          PFX_B64: ${{ secrets.PETATOKO_SIGN_PFX_BASE64 }}
+          PFX_PWD: ${{ secrets.PETATOKO_SIGN_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:PFX_B64)) { Write-Host 'Sertifikat tidak dikonfigurasi: installer TIDAK ditandatangani.'; exit 0 }
+          $pfx = Join-Path $env:RUNNER_TEMP 'sign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX_B64))
+          "PETATOKO_SIGN_PFX=$pfx" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "PETATOKO_SIGN_PASSWORD=$env:PFX_PWD" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'Sertifikat tanda tangan dimuat.'
+
       - name: Bangun installer
         shell: pwsh
         run: powershell -NoProfile -ExecutionPolicy Bypass -File desktop/build.ps1
 
-      - name: Uji instalasi nyata
+      - name: Uji instalasi nyata (path berspasi)
         shell: pwsh
         run: |
           $setup = (Get-ChildItem desktop/dist/PetaToko-Setup-*.exe | Select-Object -First 1).FullName
           powershell -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test_install.ps1 -Installer $setup
+
+      - name: Uji instalasi nyata (folder data non-Latin)
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem desktop/dist/PetaToko-Setup-*.exe | Select-Object -First 1).FullName
+          powershell -NoProfile -ExecutionPolicy Bypass -File desktop/tools/test_install.ps1 -Installer $setup -UnicodeData
+
+      - name: Ringkasan keamanan berkas
+        id: info
+        shell: pwsh
+        run: |
+          $f = Get-ChildItem desktop/dist/PetaToko-Setup-*.exe | Select-Object -First 1
+          $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
+          $sig = Get-AuthenticodeSignature $f.FullName
+          $signed = if ($sig.SignerCertificate) { "Ditandatangani oleh: $($sig.SignerCertificate.Subject) (status: $($sig.Status))" } else { 'Belum ditandatangani (SmartScreen dapat memberi peringatan; lihat panduan di bawah).' }
+          $body = Get-Content desktop/RELEASE_NOTES.md -Raw
+          $body = $body.Replace('{{SHA256}}', $hash).Replace('{{FILE}}', $f.Name).Replace('{{SIGNATURE}}', $signed)
+          Set-Content -Path release-body.md -Value $body -Encoding utf8
+          Write-Host $body
+
+      - name: Provenance build (bukti bahwa berkas dibuat oleh GitHub Actions dari kode ini)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: desktop/dist/PetaToko-Setup-*.exe
 
       - uses: actions/upload-artifact@v4
         with:
@@ -47,11 +90,13 @@ jobs:
             desktop/dist/PetaToko-Setup-*.exe
             desktop/dist/PetaToko-Setup-*.exe.sha256
 
-      - name: Lampirkan ke Release
+      - name: Terbitkan Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release-body.md
+          generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
             desktop/dist/PetaToko-Setup-*.exe
             desktop/dist/PetaToko-Setup-*.exe.sha256
-          generate_release_notes: true

@@ -5,7 +5,8 @@ Mengumpulkan dan menelusuri data toko dari Google Maps berdasarkan wilayah admin
 
 > Status: **Selesai**: database, seed wilayah, scraper, antrean job + API, frontend, halaman hasil, dan **installer Windows**.
 >
-> **Pengguna awam (Windows):** unduh installer dari halaman Releases, klik dua kali, selesai. Lihat [desktop/README.md](desktop/README.md).
+> **Pengguna awam (Windows):** unduh installer terbaru dari [Releases](https://github.com/Mahfudin98/lapakan-app/releases/latest), klik dua kali, selesai.
+> Panduan lengkap: [desktop/README.md](desktop/README.md).
 > Bagian di bawah ini untuk pengembang / yang menjalankan dengan Docker.
 
 ## Setup

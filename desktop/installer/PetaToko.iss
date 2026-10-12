@@ -20,7 +20,10 @@ AppId={{341D125E-EEFF-4051-9D25-C45D815AE522}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
-AppPublisher=Peta Toko
+AppPublisher=Mahfudin98
+AppPublisherURL=https://github.com/Mahfudin98/lapakan-app
+AppSupportURL=https://github.com/Mahfudin98/lapakan-app/issues
+AppUpdatesURL=https://github.com/Mahfudin98/lapakan-app/releases
 DefaultDirName={autopf}\PetaToko
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
@@ -41,8 +44,18 @@ CloseApplications=no
 RestartApplications=no
 ExtraDiskSpaceRequired=1073741824
 VersionInfoVersion={#AppVersion}
+VersionInfoCompany=Mahfudin98
+VersionInfoProductName={#AppName}
+VersionInfoProductVersion={#AppVersion}
+VersionInfoOriginalFileName=PetaToko-Setup-{#AppVersion}.exe
 VersionInfoDescription={#AppName} - instalasi
 UninstallDisplayName={#AppName}
+
+; Tanda tangan digital (opsional): build.ps1 mengaktifkannya bila PETATOKO_SIGN_PFX diset.
+#ifdef Sign
+SignTool=petasign
+SignedUninstaller=yes
+#endif
 
 [Languages]
 Name: "id"; MessagesFile: "Indonesian.isl"

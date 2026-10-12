@@ -171,9 +171,26 @@ Run $py @('-c', $probe)
 if ($SkipInstaller) { Write-Host "`nSelesai (installer dilewati). Staging: $Stage" -ForegroundColor Green; exit 0 }
 Step 'Mengompilasi installer (Inno Setup, bisa beberapa menit)'
 New-Item -ItemType Directory -Force $Dist | Out-Null
-Run $Iscc @("/DAppVersion=$Version", "/DStageDir=$Stage", "/DOutDir=$Dist", (Join-Path $Desktop 'installer\PetaToko.iss'))
+$isccArgs = @("/DAppVersion=$Version", "/DStageDir=$Stage", "/DOutDir=$Dist")
+$signing = -not [string]::IsNullOrEmpty($env:PETATOKO_SIGN_PFX)
+if ($signing) {
+  # tanda tangan digital installer + uninstaller (lihat desktop\tools\sign.ps1). $f diganti Inno dengan path berkas.
+  $signScript = Join-Path $Desktop 'tools\sign.ps1'
+  $isccArgs += '/DSign=1'
+  $isccArgs += ('/Spetasign=powershell -NoProfile -ExecutionPolicy Bypass -File "' + $signScript + '" -File $f')
+  Write-Host 'Penandatanganan digital: AKTIF'
+} else {
+  Write-Host 'Penandatanganan digital: tidak dikonfigurasi (installer tanpa tanda tangan; set PETATOKO_SIGN_PFX untuk mengaktifkan)' -ForegroundColor Yellow
+}
+$isccArgs += (Join-Path $Desktop 'installer\PetaToko.iss')
+Run $Iscc $isccArgs
 $setup = Join-Path $Dist "PetaToko-Setup-$Version.exe"
 if (-not (Test-Path $setup)) { Fail "Installer tidak terbentuk: $setup" }
+if ($signing) {
+  $sig = Get-AuthenticodeSignature $setup
+  if (-not $sig.SignerCertificate) { Fail "Installer seharusnya ditandatangani tetapi tidak bertanda tangan: $setup" }
+  Write-Host "Tanda tangan: $($sig.Status) | $($sig.SignerCertificate.Subject) | timestamp: $([bool]$sig.TimeStamperCertificate)" -ForegroundColor Green
+}
 $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
 "$hash  PetaToko-Setup-$Version.exe" | Set-Content "$setup.sha256" -Encoding ascii
 $mb = [math]::Round((Get-Item $setup).Length / 1MB)
