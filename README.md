@@ -155,6 +155,10 @@ Ekspor CSV memakai UTF-8 + BOM (terbuka benar di Excel) dan sel yang diawali `= 
 
 Titik acuan jarak: geolokasi browser (otomatis saat memilih "Terdekat dari saya") atau klik di peta. Peta memakai tile OpenStreetMap + marker clustering.
 
+## Lisensi
+
+Gratis dan open source, dilisensikan di bawah [MIT](LICENSE): boleh dipakai, diubah, dan dibagikan tanpa biaya.
+
 ## Struktur
 
 ```
